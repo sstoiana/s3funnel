@@ -19,7 +19,7 @@ This tool uses the workerpool for multithreading and boto for access to the Amaz
       zip_safe=False,
       install_requires=[
           # -*- Extra requirements: -*-
-          'boto','workerpool',
+          'boto','workerpool >= 0.9.2',
       ],
       entry_points="""
       # -*- Entry points: -*-

@@ -5,20 +5,45 @@
 # This module is part of s3funnel and is released under
 # the MIT license: http://www.opensource.org/licenses/mit-license.php
 
+"""
+s3funnel is a multithreaded tool for performing operations on Amazon's S3.
+"""
+
 import workerpool
 import boto
 import logging
+
+from glob import glob
+
 import signal
+import threading
 
 from optparse import OptionParser
-from threading import Event
 
 log = logging.getLogger(__name__)
 event_stop = threading.Event()
 
+class S3ToolBox(object):
+    def __init__(self, aws_key, aws_secret_key, bucket):
+        self.conn = boto.connect_s3(aws_key, aws_secret_key)
+        self.bucket = self.conn.get_bucket(bucket)
+
+class GetJob(workerpool.Job):
+    def __init__(self, key):
+        self.key = key
+
+    def run(self, toolbox):
+        k = toolbox.bucket.new_key(self.key)
+        try:
+            # FIXME: Don't create file if it didn't fetch properly
+            k.get_contents_to_filename(self.key)
+            log.info("Got: %s" % self.key)
+        except boto.exception.S3ResponseError:
+            log.error("Failed to get: %s" % self.key)
+
 def main():
     # Parse the command line...
-    usage="%prog BUCKET OPERATION [OPTIONS] [FILE]...\n\n" + __doc__
+    usage="%prog BUCKET OPERATION [OPTIONS] [FILE]...\n" + __doc__
     parser = OptionParser(usage)
     parser.add_option("-a", "--aws_key", dest="aws_key", type="string", 
                         help="Overrides AWS_ACCESS_KEY_ID environment variable")
@@ -30,6 +55,8 @@ def main():
                         help="(`list` only) Start key for list operation")
     parser.add_option("--acl", dest="acl", type="string", default="public-read",
                         help="(`put` only) Set the ACL permission for each file (default: public-read)")
+    parser.add_option("-i", "--input", dest="input", type="string", metavar="FILE",
+                        help="Read one file per line from a FILE manifest.")
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=None,
                         help="Enable verbose output")
     # TODO:
@@ -41,16 +68,20 @@ def main():
     # Check input
     aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
     aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+    ## AWS
     if options.aws_key:
         aws_key = options.aws_key
     if options.aws_secret_key:
         aws_secret_key = options.aws_secret_key
     if None in [aws_key, aws_secret_key]:
         parser.error("Missing required arguments `aws_key` or `aws_secret_key`")
+
+    ## Threads
     if options.numthreads < 1:
         parser.error("`theads` must be at least 1")
-    if options.cyclesize < 1:
-        parser.error("`cyclesize` must be at least 1")
+
+    ## Arguments
     if len(args) < 1:
         parser.error("BUCKET not specified")
     bucket = args[0]
@@ -60,6 +91,12 @@ def main():
     if operation not in ["get", "put", "list", "delete"]:
         parser.error("OPERATION must be one of: get, put, list, or delete")
 
+    # Setup operation->Job map
+    job_map = {'get': GetJob}
+
+    if operation not in job_map:
+        parser.error("Operation `%s' not implemented yet." % operation)
+
     # TODO: Rewrite this to use different handlers
     level = logging.INFO
     if options.verbose:
@@ -68,11 +105,35 @@ def main():
     log.level = level
 
     # Get data source
-    if len(args) < 3: # Aww, it's a heart
-        print "Reading file list from stdin..."
+    input_src = None
+    if options.input:
+        # Get source from manifest or stdin (via -i flag)
+        if options.input == '-':
+            input_src = "stdin"
+            options.input = sys.stdin
+        try:
+            data = open(options.input)
+        except IOError:
+            log.error("%s: No such file" % options.input)
+            return
+        input_src = "`%s'" % options.input
+    elif len(args) < 3:
+        # Get source from stdin
+        input_src = "stdin"
         data = sys.stdin
     else:
-        data = args[3:]
+        if operation == 'put':
+            # Get source from glob-expanded arguments
+            data = []
+            for arg in args[2:]:
+                found = glob(arg)
+                if not found:
+                    log.error("%s: No such file." % arg)
+                    continue
+                data += found
+        else:
+            data = args[2:]
+        input_src = "arguments: %s" % ', '.join(data)
 
     # Setup operation configuration
     config = {'acl': options.acl,
@@ -81,19 +142,32 @@ def main():
 
     # Fire up the thread pool
     log.info("Starting pool with %d threads..." % options.numthreads)
-    pool = workerpool.WorkerPool(options.numthreads)
+    def toolbox_factory():
+        return S3ToolBox(aws_key, aws_secret_key, bucket)
+    def worker_factory(job_queue):
+        return workerpool.EquippedWorker(job_queue, toolbox_factory)
+    try:
+        pool = workerpool.WorkerPool(options.numthreads, maxjobs=options.numthreads*2, worker_factory=worker_factory)
+    except Exception, e:
+        log.critical("Failed starting workers: <%s> %s: %s" % (e.__class__.__name__, e.status, e.reason))
+        return
 
     # Setup interrupt handling
     def shutdown(signum, stack):
         log.warn("Interrupted, shutting down...")
-        stop_event.set()
+        event_stop.set()
     signal.signal(signal.SIGINT, shutdown)
 
     # Start feeding jobs into the workers
-    for item in data:
-        if event_stop.isSet(): break
-        j = workerpool.Job() # TODO: Fill this in
-        pool.put(j)
+    log.info("Using files from %s" % input_src )
+    Job = job_map[operation]
+    try:
+        for item in data:
+            if event_stop.isSet(): break
+            j = Job(item)
+            pool.put(j)
+    except IOError:
+        log.warn("Aborted.")
 
     pool.shutdown()
 
