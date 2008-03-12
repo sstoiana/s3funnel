@@ -24,4 +24,5 @@ This tool uses the workerpool for multithreading and boto for access to the Amaz
       entry_points="""
       # -*- Entry points: -*-
       """,
+      scripts=['scripts/s3funnel'],
       )

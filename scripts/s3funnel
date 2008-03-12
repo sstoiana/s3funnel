@@ -1,0 +1,7 @@
+#!/usr/bin/env python
+# s3funnel - Multithreaded tool for performing operations on Amazon's S3
+# Copyright (c) 2008 Andrey Petrov
+#
+# This module is part of s3funnel and is released under
+# the MIT license: http://www.opensource.org/licenses/mit-license.php
+
