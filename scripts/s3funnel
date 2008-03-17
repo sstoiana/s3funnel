@@ -9,6 +9,7 @@
 s3funnel is a multithreaded tool for performing operations on Amazon's S3.
 """
 
+import os
 import workerpool
 import boto
 import logging
@@ -28,6 +29,8 @@ class S3ToolBox(object):
         self.conn = boto.connect_s3(aws_key, aws_secret_key)
         self.bucket = self.conn.get_bucket(bucket)
 
+# Multithreaded jobs
+
 class GetJob(workerpool.Job):
     def __init__(self, key):
         self.key = key
@@ -40,6 +43,12 @@ class GetJob(workerpool.Job):
             log.info("Got: %s" % self.key)
         except boto.exception.S3ResponseError:
             log.error("Failed to get: %s" % self.key)
+
+# Singlethreaded methods
+
+def perform_list(toolbox, start_key=None):
+    for i in toolbox.bucket:
+        print i.name
 
 def main():
     # Parse the command line...
@@ -91,18 +100,29 @@ def main():
     if operation not in ["get", "put", "list", "delete"]:
         parser.error("OPERATION must be one of: get, put, list, or delete")
 
-    # Setup operation->Job map
-    job_map = {'get': GetJob}
+    # Setup factories
+    def toolbox_factory():
+        return S3ToolBox(aws_key, aws_secret_key, bucket)
+    def worker_factory(job_queue):
+        return workerpool.EquippedWorker(job_queue, toolbox_factory)
 
-    if operation not in job_map:
-        parser.error("Operation `%s' not implemented yet." % operation)
-
+    # Setup logging
     # TODO: Rewrite this to use different handlers
     level = logging.INFO
     if options.verbose:
         level = logging.DEBUG
     log.addHandler(logging.StreamHandler())
     log.level = level
+
+    # Setup operation mapping
+    job_map = {'get': GetJob}
+    method_map = {'list': perform_list}
+
+    if operation in method_map:
+        return method_map[operation](toolbox_factory())
+    
+    if operation not in job_map:
+        parser.error("Operation `%s' not implemented yet." % operation)
 
     # Get data source
     input_src = None
@@ -142,10 +162,6 @@ def main():
 
     # Fire up the thread pool
     log.info("Starting pool with %d threads..." % options.numthreads)
-    def toolbox_factory():
-        return S3ToolBox(aws_key, aws_secret_key, bucket)
-    def worker_factory(job_queue):
-        return workerpool.EquippedWorker(job_queue, toolbox_factory)
     try:
         pool = workerpool.WorkerPool(options.numthreads, maxjobs=options.numthreads*2, worker_factory=worker_factory)
     except Exception, e:
@@ -164,7 +180,7 @@ def main():
     try:
         for item in data:
             if event_stop.isSet(): break
-            j = Job(item)
+            j = Job(item.strip())
             pool.put(j)
     except IOError:
         log.warn("Aborted.")
