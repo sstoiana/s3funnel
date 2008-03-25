@@ -9,16 +9,22 @@
 s3funnel is a multithreaded tool for performing operations on Amazon's S3.
 """
 
+"""
+TODO:
+* Use callback to do an interactive progress bar
+"""
+
 import os
-import workerpool
-import boto
+import time
 import logging
-
-from glob import glob
-
 import signal
 import threading
+import socket
 
+import workerpool
+import boto
+
+from glob import glob
 from optparse import OptionParser
 
 log = logging.getLogger(__name__)
@@ -32,17 +38,56 @@ class S3ToolBox(object):
 # Multithreaded jobs
 
 class GetJob(workerpool.Job):
-    def __init__(self, key):
+    def __init__(self, key, config={}):
         self.key = key
+        self.retries = config.get('retry', 5)
 
     def run(self, toolbox):
         k = toolbox.bucket.new_key(self.key)
-        try:
-            # FIXME: Don't create file if it didn't fetch properly
-            k.get_contents_to_filename(self.key)
-            log.info("Got: %s" % self.key)
-        except boto.exception.S3ResponseError:
-            log.error("Failed to get: %s" % self.key)
+        wait = 1
+        for i in xrange(self.retries):
+            try:
+                # Note: This creates a file, even if the download fails
+                k.get_contents_to_filename(self.key)
+                log.info("Got: %s" % self.key)
+                return
+            except boto.exception.BotoServerError, e:
+                log.error("Failed to get: %s" % self.key)
+                os.unlink(self.key) # Remove file since download failed
+                return
+            except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
+                log.warn("Caught exception: %s. Retrying..." % e.__class__.__name__)
+                wait = (2 ** wait) / 2.0 # Exponential backoff
+                time.sleep(wait)
+
+class PutJob(workerpool.Job):
+    def __init__(self, path, config={}):
+        self.key = os.path.basename(path)
+        self.path = path
+        self.acl = config.get('acl')
+        if self.acl not in ['public-read', 'private']:
+            self.acl = 'private'
+
+    def run(self, toolbox):
+        k = toolbox.bucket.new_key(self.key)
+        wait = 1
+        headers = {'x-amz-acl': self.acl}
+
+        for i in xrange(self.retries):
+            try:
+                # Note: This creates a file, even if the download fails
+                k.set_contents_from_filename(self.path, headers)
+                log.info("Sent: %s" % self.key)
+                return
+            except boto.exception.BotoServerError, e:
+                log.error("Failed to put: %s" % self.key)
+                os.unlink(self.key) # Remove file since download failed
+                return
+            except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
+                log.warn("Caught exception: %s. Retrying..." % e.__class__.__name__)
+                wait = (2 ** wait) / 2.0 # Exponential backoff
+                time.sleep(wait)
+
 
 # Singlethreaded methods
 
@@ -115,7 +160,8 @@ def main():
     log.level = level
 
     # Setup operation mapping
-    job_map = {'get': GetJob}
+    job_map = {'get': GetJob,
+                'put', PutJob}
     method_map = {'list': perform_list}
 
     if operation in method_map:
@@ -132,9 +178,9 @@ def main():
             input_src = "stdin"
             options.input = sys.stdin
         try:
-            data = open(options.input)
-        except IOError:
-            log.error("%s: No such file" % options.input)
+            data = open(glob(options.input)[0])
+        except IOError, IndexError:
+            log.error("%s: File not found" % options.input)
             return
         input_src = "`%s'" % options.input
     elif len(args) < 3:
@@ -180,7 +226,7 @@ def main():
     try:
         for item in data:
             if event_stop.isSet(): break
-            j = Job(item.strip())
+            j = Job(item.strip(), config)
             pool.put(j)
     except IOError:
         log.warn("Aborted.")
