@@ -64,6 +64,7 @@ class PutJob(workerpool.Job):
     def __init__(self, path, config={}):
         self.key = os.path.basename(path)
         self.path = path
+        self.retries = config.get('retry', 5)
         self.acl = config.get('acl')
         if self.acl not in ['public-read', 'private']:
             self.acl = 'private'
@@ -161,7 +162,7 @@ def main():
 
     # Setup operation mapping
     job_map = {'get': GetJob,
-                'put', PutJob}
+               'put': PutJob}
     method_map = {'list': perform_list}
 
     if operation in method_map:
