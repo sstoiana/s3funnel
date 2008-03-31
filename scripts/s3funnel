@@ -171,8 +171,8 @@ def main():
         try:
             return method_map[operation](toolbox_factory())
         except boto.exception.S3ResponseError, e:
-            if e.status == 404:
-                log.critical("Bucket not found.")
+            if e.status >= 400 and e.status < 500:
+                log.error("%d: %s" % (e.status, e.reason))
             else:
                 log.critical("Unexpected server error: %r" % e)
             return -1
