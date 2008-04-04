@@ -106,23 +106,14 @@ def main():
     # Parse the command line...
     usage="%prog BUCKET OPERATION [OPTIONS] [FILE]...\n" + __doc__
     parser = OptionParser(usage)
-    parser.add_option("-a", "--aws_key", dest="aws_key", type="string", 
-                        help="Overrides AWS_ACCESS_KEY_ID environment variable")
-    parser.add_option("-s", "--aws_secret_key", dest="aws_secret_key", type="string",
-                        help="Overrides AWS_SECRET_ACCESS_KEY environment variable")
-    parser.add_option("-t", "--threads", dest="numthreads", default=1, type="int", metavar="N",
-                        help="Number of threads to use (default: 5)")
-    parser.add_option("--start_key", dest="start_key", type="string", default=None,
-                        help="(`list` only) Start key for list operation")
-    parser.add_option("--acl", dest="acl", type="string", default="public-read",
-                        help="(`put` only) Set the ACL permission for each file (default: public-read)")
-    parser.add_option("-i", "--input", dest="input", type="string", metavar="FILE",
-                        help="Read one file per line from a FILE manifest.")
-    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=None,
-                        help="Enable verbose output")
-    # TODO:
-    #   (-T, --timeout) socket timeout
-    #   (-i, --input) manifest input file
+    parser.add_option("-a", "--aws_key", dest="aws_key", type="string", help="Overrides AWS_ACCESS_KEY_ID environment variable")
+    parser.add_option("-s", "--aws_secret_key", dest="aws_secret_key", type="string", help="Overrides AWS_SECRET_ACCESS_KEY environment variable")
+    parser.add_option("-t", "--threads", dest="numthreads", default=1, type="int", metavar="N", help="Number of threads to use (default: 5)")
+    parser.add_option("-T", "--timeout", dest="timeout", default=0, type="float", metavar="SECONDS", help="Socket timeout time (default: 0, never)")
+    parser.add_option("--start_key", dest="start_key", type="string", default=None, help="(`list` only) Start key for list operation")
+    parser.add_option("--acl", dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file (default: public-read)")
+    parser.add_option("-i", "--input", dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest.")
+    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=None, help="Enable verbose output")
     
     options, args = parser.parse_args()
 
@@ -141,6 +132,13 @@ def main():
     ## Threads
     if options.numthreads < 1:
         parser.error("`theads` must be at least 1")
+
+    ## Misc. options
+    if options.timeout:
+        try:
+            socket.setdefaulttimeout(options.timeout)
+        except TypeError, e:
+            parser.error("`timeout` error: %s" % e.message)
 
     ## Arguments
     if len(args) < 1:
