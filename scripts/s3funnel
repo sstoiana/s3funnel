@@ -20,19 +20,21 @@ log_handler = logging.StreamHandler()
 log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
 log.addHandler(log_handler)
 
-
+# Official Python modules
 import os
 import sys
 import time
 import signal
 import threading
 import socket
-
-import workerpool
-import boto
+import httplib
 
 from glob import glob
 from optparse import OptionParser
+
+# Third party modules
+import workerpool
+import boto
 
 event_stop = threading.Event()
 
@@ -62,7 +64,7 @@ class GetJob(workerpool.Job):
                 os.unlink(self.key) # Remove file since download failed
                 return
             except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
-                log.warning("Caught exception: %s. Retrying..." % e.__class__.__name__)
+                log.warning("Caught exception: %r.\nRetrying..." % e)
                 wait = (2 ** wait) / 2.0 # Exponential backoff
                 time.sleep(wait)
 
@@ -91,7 +93,7 @@ class PutJob(workerpool.Job):
                 os.unlink(self.key) # Remove file since download failed
                 return
             except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
-                log.warning("Caught exception: %s. Retrying..." % e.__class__.__name__)
+                log.warning("Caught exception: %r.\nRetrying..." % e)
                 wait = (2 ** wait) / 2.0 # Exponential backoff
                 time.sleep(wait)
 
@@ -219,7 +221,7 @@ def main():
     try:
         pool = workerpool.WorkerPool(options.numthreads, maxjobs=options.numthreads*2, worker_factory=worker_factory)
     except Exception, e:
-        log.critical("Failed starting workers: <%s> %s: %s" % (e.__class__.__name__, e.status, e.reason))
+        log.critical("Failed starting workers: %r" % e)
         return -1
 
     # Setup interrupt handling
