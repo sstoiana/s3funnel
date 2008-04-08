@@ -101,7 +101,6 @@ class PutJob(workerpool.Job):
                 return
             except boto.exception.BotoServerError, e:
                 log.error("Failed to put: %s" % self.key)
-                os.unlink(self.key) # Remove file since download failed
                 return
             except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
