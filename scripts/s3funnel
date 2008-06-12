@@ -8,16 +8,15 @@
 """
 s3funnel is a multithreaded tool for performing operations on Amazon's S3.
 
-Bucket operations:
-    list BUCKET [--start_key=KEY]
-    get BUCKET [KEYS]
-    put BUCKET [FILES] [--acl=ACL]
-    delete BUCKET [KEYS]    # Not implemented
+Key Operations:
+    DELETE Delete key from the bucket
+    GET    Get key from the bucket
+    PUT    Put file into the bucket (key corresponds to filename)
 
-Account operations:
-    list                    # Not implemented
-    create BUCKET           # Not implemented
-    delete BUCKET           # Not implemented
+Bucket Operations:
+    CREATE Create a new bucket
+    DROP   Delete an existing bucket (must be empty)
+    LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
 """
@@ -26,10 +25,7 @@ TODO:
 """
 
 import logging
-log = logging.getLogger("s3funnel")
-log_handler = logging.StreamHandler()
-log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
-log.addHandler(log_handler)
+log = logging.getLogger()
 
 # Official Python modules
 import os
@@ -47,6 +43,9 @@ from optparse import OptionParser
 import workerpool
 import boto
 
+# Local imports
+from s3funnel.jobs import GetJob, PutJob, DeleteJob, list_bucket, create_bucket, drop_bucket
+
 event_stop = threading.Event()
 
 class S3ToolBox(object):
@@ -54,83 +53,20 @@ class S3ToolBox(object):
         self.conn = boto.connect_s3(aws_key, aws_secret_key)
         self.bucket = self.conn.get_bucket(bucket)
 
-# Multithreaded jobs
-
-class GetJob(workerpool.Job):
-    def __init__(self, key, config={}):
-        self.key = key
-        self.retries = config.get('retry', 5)
-
-    def run(self, toolbox):
-        k = toolbox.bucket.new_key(self.key)
-        wait = 1
-        for i in xrange(self.retries):
-            try:
-                # Note: This creates a file, even if the download fails
-                k.get_contents_to_filename(self.key)
-                log.info("Got: %s" % self.key)
-                return
-            except boto.exception.BotoClientError, e:
-                log.error("Failed to get: %s" % self.key)
-                os.unlink(self.key) # Remove file since download failed
-                return
-            except (httplib.IncompleteRead, socket.error, boto.exception.BotoServerError), e:
-                log.warning("Caught exception: %r.\nRetrying..." % e)
-                wait = (2 ** wait) / 2.0 # Exponential backoff
-                time.sleep(wait)
-
-class PutJob(workerpool.Job):
-    def __init__(self, path, config={}):
-        self.key = os.path.basename(path)
-        self.path = path
-        self.retries = config.get('retry', 5)
-        self.acl = config.get('acl')
-        if self.acl not in ['public-read', 'private']:
-            self.acl = 'private'
-
-    def run(self, toolbox):
-        k = toolbox.bucket.new_key(self.key)
-        wait = 1
-        headers = {'x-amz-acl': self.acl}
-
-        for i in xrange(self.retries):
-            try:
-                # Note: This creates a file, even if the download fails
-                k.set_contents_from_filename(self.path, headers)
-                log.info("Sent: %s" % self.key)
-                return
-            except boto.exception.BotoServerError, e:
-                log.error("Failed to put: %s" % self.key)
-                return
-            except (httplib.IncompleteRead, socket.error, boto.exception.BotoClientError), e:
-                log.warning("Caught exception: %r.\nRetrying..." % e)
-                wait = (2 ** wait) / 2.0 # Exponential backoff
-                time.sleep(wait)
-
-
-# Singlethreaded methods
-
-def perform_list(toolbox, start_key=None):
-    for i in toolbox.bucket:
-        print i.name
-
 def main():
     # Parse the command line...
-    usage="%prog [OPTIONS] OPERATION [ARGUMENTS]...\n" + __doc__
+    usage="%prog BUCKET OPERATION [OPTIONS] [FILE]...\n" + __doc__
     parser = OptionParser(usage)
-    parser.add_option("-a", "--aws_key", dest="aws_key", type="string", help="Overrides AWS_ACCESS_KEY_ID environment variable")
+    parser.add_option("-a", "--aws_key",    dest="aws_key", type="string", help="Overrides AWS_ACCESS_KEY_ID environment variable")
     parser.add_option("-s", "--aws_secret_key", dest="aws_secret_key", type="string", help="Overrides AWS_SECRET_ACCESS_KEY environment variable")
-    parser.add_option("-t", "--threads", dest="numthreads", default=1, type="int", metavar="N", help="Number of threads to use (default: 1)")
-    parser.add_option("-T", "--timeout", dest="timeout", default=0, type="float", metavar="SECONDS", help="Socket timeout time (default: 0, never)")
-    parser.add_option("--start_key", dest="start_key", type="string", default=None, help="(`list` only) Start key for list operation")
-    parser.add_option("--acl", dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file (default: public-read)")
-    parser.add_option("-i", "--input", dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest.")
-    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=None, help="Enable verbose output")
-    options, args = parser.parse_args()
+    parser.add_option("-t", "--threads",    dest="numthreads", default=1, type="int", metavar="N", help="Number of threads to use [default: %default]")
+    parser.add_option("-T", "--timeout",    dest="timeout", default=0, type="float", metavar="SECONDS", help="Socket timeout time, 0 is never [default: %default]")
+    parser.add_option("--start_key",        dest="start_key", type="string", default=None, metavar="KEY", help="(`list` only) Start key for list operation")
+    parser.add_option("--acl",              dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file [default: %default]")
+    parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest.")
+    parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output.")
 
-    # Setup logging
-    if options.verbose:
-        log.setLevel(logging.DEBUG)
+    options, args = parser.parse_args()
 
     # Check input
     aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -155,16 +91,19 @@ def main():
         except TypeError, e:
             parser.error("`timeout` error: %s" % e.message)
 
-    ## Arguments
+    # Arguments
     if len(args) < 1:
-        parser.error("OPERATION not specified")
-    operation = args[0].lower()
-    if len(args) < 2:
         parser.error("BUCKET not specified")
     bucket = args[0]
-    # TODO: Restructure this to check parameter on a per-method basis
-    if operation not in ["get", "put", "list", "delete"]:
-        parser.error("OPERATION must be one of: get, put, list, or delete")
+    if len(args) < 2:
+        # Exception for single-argument operations
+        if bucket.lower() in ['list']:
+            operation = bucket.lower()
+            bucket = None
+        else:
+            parser.error("OPERATION not specified")
+    else:
+        operation = args[1].lower()
 
     # Setup factories
     def toolbox_factory():
@@ -172,14 +111,42 @@ def main():
     def worker_factory(job_queue):
         return workerpool.EquippedWorker(job_queue, toolbox_factory)
 
+    # Setup logging
+    if options.verbose > 1:
+        log.setLevel(logging.DEBUG)
+    elif options.verbose > 0:
+        log.setLevel(logging.INFO)
+
+    # Setup operation configuration
+    config = {'acl': options.acl,
+              'start_key': options.start_key,
+              'aws_key': aws_key,
+              'aws_secret_key': aws_secret_key,
+              'bucket': bucket,
+              }
+
     # Setup operation mapping
     job_map = {'get': GetJob,
-               'put': PutJob}
-    method_map = {'list': perform_list}
+               'put': PutJob,
+               'delete': DeleteJob,
+               }
+
+    method_map = {'list': list_bucket,
+                  'create': create_bucket,
+                  'drop': drop_bucket,
+                  }
+
+    # Confirm that the requested operation exists
+    valid_operations = job_map.keys() + method_map.keys()
+    valid_operations.sort()
+    if operation not in valid_operations:
+        parser.error("OPERATION must be one of: %s" % ', '.join(valid_operations))
 
     if operation in method_map:
         try:
-            return method_map[operation](toolbox_factory())
+            # NOTE: Single-thread methods accept a toolbox_factory method instead of the resulting toolbox instance.
+            #       This makes the creation of the toolbox optional.
+            return method_map[operation](toolbox_factory, **config)
         except boto.exception.S3ResponseError, e:
             if e.status >= 400 and e.status < 500:
                 log.error("%d: %s" % (e.status, e.reason))
@@ -221,11 +188,6 @@ def main():
             data = args[2:]
         input_src = "arguments: %s" % ', '.join(data)
 
-    # Setup operation configuration
-    config = {'acl': options.acl,
-              'start_key': options.start_key,
-              }
-
     # Fire up the thread pool
     log.info("Starting pool with %d threads..." % options.numthreads)
     try:
@@ -257,4 +219,8 @@ def main():
     return 0
 
 if __name__ == "__main__":
+    log_handler = logging.StreamHandler()
+    log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
+    log.addHandler(log_handler)
+
     main()
