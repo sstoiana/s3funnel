@@ -19,6 +19,8 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
+__VERSION__ = '0.5.1'
+
 """
 TODO:
 * Use callback to do an interactive progress bar
@@ -119,7 +121,7 @@ def main():
 
     # Setup operation configuration
     config = {'acl': options.acl,
-              'start_key': options.start_key,
+              'start_key': options.start_key or '',
               'aws_key': aws_key,
               'aws_secret_key': aws_secret_key,
               'bucket': bucket,
