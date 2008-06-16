@@ -6,6 +6,7 @@
 
 from workerpool import Job
 import boto
+import time
 
 import os
 import logging

@@ -19,7 +19,7 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
-__VERSION__ = '0.5.1'
+__VERSION__ = '0.5.2'
 
 """
 TODO:
@@ -32,7 +32,6 @@ log = logging.getLogger()
 # Official Python modules
 import os
 import sys
-import time
 import signal
 import threading
 import socket
