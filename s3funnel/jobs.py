@@ -46,8 +46,10 @@ class GetJob(Job):
 class PutJob(Job):
     "Upload the given file to S3, where the key corresponds to basename(path)"
     def __init__(self, path, config={}):
-        self.key = os.path.basename(path)
         self.path = path
+        self.key = self.path
+        if not config.get('full_path'):
+            self.key = os.path.basename(self.key)
         self.retries = config.get('retry', 5)
         self.acl = config.get('acl')
         if self.acl not in ['public-read', 'private']:

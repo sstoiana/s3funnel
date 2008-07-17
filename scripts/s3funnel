@@ -11,7 +11,7 @@ s3funnel is a multithreaded tool for performing operations on Amazon's S3.
 Key Operations:
     DELETE Delete key from the bucket
     GET    Get key from the bucket
-    PUT    Put file into the bucket (key corresponds to filename)
+    PUT    Put file into the bucket (key is the basename of the path)
 
 Bucket Operations:
     CREATE Create a new bucket
@@ -19,7 +19,7 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
-__VERSION__ = '0.5.2'
+__VERSION__ = '0.6'
 
 """
 TODO:
@@ -38,7 +38,7 @@ import socket
 import httplib
 
 from glob import glob
-from optparse import OptionParser
+from optparse import OptionParser, SUPPRESS_HELP
 
 # Third party modules
 import workerpool
@@ -62,10 +62,14 @@ def main():
     parser.add_option("-s", "--aws_secret_key", dest="aws_secret_key", type="string", help="Overrides AWS_SECRET_ACCESS_KEY environment variable")
     parser.add_option("-t", "--threads",    dest="numthreads", default=1, type="int", metavar="N", help="Number of threads to use [default: %default]")
     parser.add_option("-T", "--timeout",    dest="timeout", default=0, type="float", metavar="SECONDS", help="Socket timeout time, 0 is never [default: %default]")
-    parser.add_option("--start_key",        dest="start_key", type="string", default=None, metavar="KEY", help="(`list` only) Start key for list operation")
+    parser.add_option("--start-key",        dest="start_key", type="string", default=None, metavar="KEY", help="(`list` only) Start key for list operation")
     parser.add_option("--acl",              dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file [default: %default]")
-    parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest.")
-    parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output.")
+    parser.add_option("--full-path",        dest="full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
+    parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
+    parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
+
+    # Deprecated methods (for backwards compatibility)
+    parser.add_option("--start_key",        dest="start_key", type="string", default=None, help=SUPPRESS_HELP)
 
     options, args = parser.parse_args()
 
@@ -124,6 +128,7 @@ def main():
               'aws_key': aws_key,
               'aws_secret_key': aws_secret_key,
               'bucket': bucket,
+              'full_path': options.full_path,
               }
 
     # Setup operation mapping
