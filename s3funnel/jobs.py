@@ -48,7 +48,7 @@ class PutJob(Job):
     def __init__(self, path, config={}):
         self.path = path
         self.key = self.path
-        if not config.get('full_path'):
+        if not config.get('put_full_path'):
             self.key = os.path.basename(self.key)
         self.retries = config.get('retry', 5)
         self.acl = config.get('acl')
@@ -122,19 +122,21 @@ def list_bucket(toolbox_factory, **config):
     """
     If no bucket is given, redirect call to ``show_buckets``. Otherwise:
     List all the keys in the bucket created by ``toolbox_factory``.
-    Optionally, ``config`` may contain start_key which is used for the start
-    marker for the list operation.
+    Optionally, ``config`` may contain list_marker, list_prefix, list_delimiter
+    for additional behaviours.
     """
     if not config.get('bucket'):
         return show_buckets(**config)
     toolbox = toolbox_factory()
-    marker = config.get('start_key')
+    marker = config.get('list_marker', '')
+    prefix = config.get('list_prefix', '')
+    delimiter = config.get('list_delimiter', '')
     more_results = True
     k = None
     log.info("Listing keys from marker: %s" % marker)
     while more_results:
         try:
-            r = toolbox.bucket.get_all_keys(marker=marker)
+            r = toolbox.bucket.get_all_keys(marker=marker, prefix=prefix, delimiter=delimiter)
             for k in r:
                 print k.name
             if k:

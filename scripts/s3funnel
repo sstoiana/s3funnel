@@ -62,16 +62,25 @@ def main():
     parser.add_option("-s", "--aws_secret_key", dest="aws_secret_key", type="string", help="Overrides AWS_SECRET_ACCESS_KEY environment variable")
     parser.add_option("-t", "--threads",    dest="numthreads", default=1, type="int", metavar="N", help="Number of threads to use [default: %default]")
     parser.add_option("-T", "--timeout",    dest="timeout", default=0, type="float", metavar="SECONDS", help="Socket timeout time, 0 is never [default: %default]")
-    parser.add_option("--start-key",        dest="start_key", type="string", default=None, metavar="KEY", help="(`list` only) Start key for list operation")
-    parser.add_option("--acl",              dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file [default: %default]")
-    parser.add_option("--full-path",        dest="full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
+    parser.add_option("--list-marker",      dest="list_marker", type="string", default=None, metavar="KEY", help="(`list` only) Start key for list operation")
+    parser.add_option("--list-prefix",      dest="list_prefix", type="string", default=None, metavar="STRING", help="(`list` only) Limit results to a specific prefix")
+    parser.add_option("--list-delimiter",   dest="list_delimiter", type="string", default=None, metavar="CHAR", help="(`list` only) Treat value as a delimiter for hierarchical listing")
+    parser.add_option("--put-acl",          dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file [default: %default]")
+    parser.add_option("--put-full-path",    dest="put_full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
     parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
+    parser.add_option("--version",          dest="version", action="store_true", help="Output version information and exit")
 
     # Deprecated methods (for backwards compatibility)
-    parser.add_option("--start_key",        dest="start_key", type="string", default=None, help=SUPPRESS_HELP)
+    parser.add_option("--start_key",        dest="list_marker", type="string", default=None, help=SUPPRESS_HELP)
+    parser.add_option("--acl",              dest="acl", type="string", default="public-read", help=SUPPRESS_HELP)
 
     options, args = parser.parse_args()
+
+    # Version?
+    if options.version:
+        print "s3funnel %s" % __VERSION__
+        return 0
 
     # Check input
     aws_key = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -124,11 +133,13 @@ def main():
 
     # Setup operation configuration
     config = {'acl': options.acl,
-              'start_key': options.start_key or '',
+              'list_marker': options.list_marker or '',
+              'list_prefix': options.list_prefix or '',
+              'list_delimiter': options.list_delimiter or '',
               'aws_key': aws_key,
               'aws_secret_key': aws_secret_key,
               'bucket': bucket,
-              'full_path': options.full_path,
+              'put_full_path': options.put_full_path,
               }
 
     # Setup operation mapping
@@ -229,4 +240,5 @@ if __name__ == "__main__":
     log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
     log.addHandler(log_handler)
 
-    main()
+    r = main()
+    sys.exit(r)
