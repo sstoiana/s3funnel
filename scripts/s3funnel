@@ -183,7 +183,7 @@ def main():
             options.input = sys.stdin
         try:
             data = open(glob(options.input)[0])
-        except IOError, IndexError:
+        except (IOError, IndexError), e:
             log.error("%s: File not found" % options.input)
             return -1
         input_src = "`%s'" % options.input
