@@ -73,6 +73,9 @@ class PutJob(Job):
                 log.warning("Caught exception: %r.\nRetrying..." % e)
                 wait = (2 ** wait) / 2.0 # Exponential backoff
                 time.sleep(wait)
+            except IOError, e:
+                log.error("Path does not exist, skipping: %s" % self.path)
+                return
 
 class DeleteJob(Job):
     "Delete the given key from S3."
