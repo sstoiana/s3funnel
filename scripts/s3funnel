@@ -241,4 +241,5 @@ if __name__ == "__main__":
     log.addHandler(log_handler)
 
     r = main()
-    sys.exit(r)
+    if r:
+        sys.exit(r)

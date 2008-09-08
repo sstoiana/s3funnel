@@ -66,16 +66,14 @@ class PutJob(Job):
                 k.set_contents_from_filename(self.path, headers)
                 log.info("Sent: %s" % self.key)
                 return
-            except BotoServerError, e:
-                log.error("Failed to put: %s" % self.key)
-                return
-            except (IncompleteRead, SocketError, BotoClientError), e:
+            except (IncompleteRead, SocketError, BotoClientError, BotoServerError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
                 wait = (2 ** wait) / 2.0 # Exponential backoff
                 time.sleep(wait)
             except IOError, e:
-                log.error("Path does not exist, skipping: %s" % self.path)
+                log.warning("Path does not exist, skipping: %s" % self.path)
                 return
+        log.error("Failed to put: %s" % self.key)
 
 class DeleteJob(Job):
     "Delete the given key from S3."
