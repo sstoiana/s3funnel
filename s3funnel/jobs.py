@@ -27,7 +27,6 @@ class GetJob(Job):
 
     def run(self, toolbox):
         k = toolbox.bucket.new_key(self.key)
-        wait = 1
         for i in xrange(self.retries):
             try:
                 # Note: This creates a file, even if the download fails
@@ -40,8 +39,7 @@ class GetJob(Job):
                 return
             except (IncompleteRead, SocketError, BotoClientError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
-                wait = (2 ** wait) / 2.0 # Exponential backoff
-                time.sleep(wait)
+                time.sleep((2 ** i) / 4.0) # Exponential backoff
 
 class PutJob(Job):
     "Upload the given file to S3, where the key corresponds to basename(path)"
@@ -56,10 +54,8 @@ class PutJob(Job):
             self.acl = 'private'
 
     def run(self, toolbox):
-        k = toolbox.bucket.new_key(self.key)
-        wait = 1
         headers = {'x-amz-acl': self.acl}
-
+        k = toolbox.bucket.new_key(self.key)
         for i in xrange(self.retries):
             try:
                 # Note: This creates a file, even if the download fails
@@ -68,8 +64,7 @@ class PutJob(Job):
                 return
             except (IncompleteRead, SocketError, BotoClientError, BotoServerError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
-                wait = (2 ** wait) / 2.0 # Exponential backoff
-                time.sleep(wait)
+                time.sleep((2 ** i) / 4.0) # Exponential backoff
             except IOError, e:
                 log.warning("Path does not exist, skipping: %s" % self.path)
                 return
@@ -82,7 +77,6 @@ class DeleteJob(Job):
         self.retries = config.get('retry', 5)
 
     def run(self, toolbox):
-        wait = 1
         for i in xrange(self.retries):
             try:
                 k = toolbox.bucket.delete_key(self.key)
@@ -93,8 +87,7 @@ class DeleteJob(Job):
                 return
             except (IncompleteRead, SocketError, BotoClientError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
-                wait = (2 ** wait) / 2.0 # Exponential backoff
-                time.sleep(wait)
+                time.sleep((2 ** i) / 4.0) # Exponential backoff
 
 
 # Helpers
@@ -148,8 +141,7 @@ def list_bucket(toolbox_factory, **config):
             return
         except (IncompleteRead, SocketError, BotoClientError), e:
             log.warning("Caught exception: %r.\nRetrying..." % e)
-            wait = (2 ** wait) / 2.0 # Exponential backoff
-            time.sleep(wait)
+            time.sleep(1.0)
     log.info("Done listing bucket: %s" % config['bucket'])
 
 def create_bucket(toolbox_factory, **config):
