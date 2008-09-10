@@ -33,6 +33,9 @@ class GetJob(Job):
                 k.get_contents_to_filename(self.key)
                 log.info("Got: %s" % self.key)
                 return
+            except S3ResponseError, e:
+                log.warning("Connection lost, reconnecting and retrying...")
+                toolbox.connect()
             except BotoServerError, e:
                 log.error("Failed to get: %s" % self.key)
                 os.unlink(self.key) # Remove file since download failed
@@ -62,9 +65,15 @@ class PutJob(Job):
                 k.set_contents_from_filename(self.path, headers)
                 log.info("Sent: %s" % self.key)
                 return
-            except (IncompleteRead, SocketError, BotoClientError, BotoServerError), e:
+            except S3ResponseError, e:
+                log.warning("Connection lost, reconnecting and retrying...")
+                toolbox.connect()
+            except (IncompleteRead, SocketError, BotoClientError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
                 time.sleep((2 ** i) / 4.0) # Exponential backoff
+            except BotoServerError, e:
+                log.error("Failed to put: %s" % self.key)
+                return
             except IOError, e:
                 log.warning("Path does not exist, skipping: %s" % self.path)
                 return
@@ -82,6 +91,9 @@ class DeleteJob(Job):
                 k = toolbox.bucket.delete_key(self.key)
                 log.info("Deleted: %s" % self.key)
                 return
+            except S3ResponseError, e:
+                log.warning("Connection lost, reconnecting and retrying...")
+                toolbox.connect()
             except BotoServerError, e:
                 log.error("Failed to delete: %s" % self.key)
                 return
