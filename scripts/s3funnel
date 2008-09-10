@@ -57,8 +57,8 @@ class S3ToolBox(object):
         self.connect()
 
     def connect(self):
-        self.conn = boto.connect_s3(aws_key, aws_secret_key)
-        self.bucket = self.conn.get_bucket(bucket)
+        self.conn = boto.connect_s3(self.aws_key, self.aws_secret_key)
+        self.bucket = self.conn.get_bucket(self.bucket_name)
 
 def main():
     # Parse the command line...
