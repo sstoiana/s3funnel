@@ -52,7 +52,7 @@ event_stop = threading.Event()
 class S3ToolBox(object):
     def __init__(self, aws_key, aws_secret_key, bucket_name):
         self.aws_key = aws_key
-        self.aws_secret = aws_secret
+        self.aws_secret_key = aws_secret
         self.bucket_name = bucket_name
         self.connect()
 
