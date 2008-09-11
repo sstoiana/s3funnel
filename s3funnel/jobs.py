@@ -13,7 +13,7 @@ import logging
 log = logging.getLogger()
 
 # Various exceptions we're expecting
-from boto.exception import BotoServerError, BotoClientError
+from boto.exception import BotoServerError, BotoClientError, S3ResponseError
 from httplib import IncompleteRead
 from socket import error as SocketError
 
