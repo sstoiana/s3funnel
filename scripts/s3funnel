@@ -77,9 +77,12 @@ def main():
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
     parser.add_option("--version",          dest="version", action="store_true", help="Output version information and exit")
 
-    # Deprecated methods (for backwards compatibility)
+    # Deprecated options (for backwards compatibility)
     parser.add_option("--start_key",        dest="list_marker", type="string", default=None, help=SUPPRESS_HELP)
     parser.add_option("--acl",              dest="acl", type="string", default="public-read", help=SUPPRESS_HELP)
+
+    # Hidden options for debugging, development, and lols
+    # TODO: ...
 
     options, args = parser.parse_args()
 

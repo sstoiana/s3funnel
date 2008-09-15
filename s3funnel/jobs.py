@@ -72,11 +72,14 @@ class PutJob(Job):
                 log.warning("Caught exception: %r.\nRetrying..." % e)
                 time.sleep((2 ** i) / 4.0) # Exponential backoff
             except BotoServerError, e:
-                log.error("Failed to put: %s" % self.key)
-                return
+                break
             except IOError, e:
                 log.warning("Path does not exist, skipping: %s" % self.path)
                 return
+            except Exception, e:
+                log.critical("Unexpected exception: %r" % e)
+                break
+
         log.error("Failed to put: %s" % self.key)
 
 class DeleteJob(Job):
