@@ -27,7 +27,15 @@ TODO:
 """
 
 import logging
-log = logging.getLogger()
+
+log = logging.getLogger(__name__)
+s3funnel_log = logging.getLogger('s3funnel')
+boto_log = logging.getLogger('boto')
+
+def set_log_level(level):
+    for i in [log, s3funnel_log, boto_log]:
+        i.setLevel(level)
+
 
 # Official Python modules
 import os
@@ -42,23 +50,12 @@ from optparse import OptionParser, SUPPRESS_HELP
 
 # Third party modules
 import workerpool
-import boto
 
 # Local imports
-from s3funnel.jobs import GetJob, PutJob, DeleteJob, list_bucket, create_bucket, drop_bucket
+from s3funnel import S3Funnel
+from s3funnel.exceptions import FunnelError
 
 event_stop = threading.Event()
-
-class S3ToolBox(object):
-    def __init__(self, aws_key, aws_secret_key, bucket_name):
-        self.aws_key = aws_key
-        self.aws_secret_key = aws_secret_key
-        self.bucket_name = bucket_name
-        self.connect()
-
-    def connect(self):
-        self.conn = boto.connect_s3(self.aws_key, self.aws_secret_key)
-        self.bucket = self.conn.get_bucket(self.bucket_name)
 
 def main():
     # Parse the command line...
@@ -73,6 +70,7 @@ def main():
     parser.add_option("--list-delimiter",   dest="list_delimiter", type="string", default=None, metavar="CHAR", help="(`list` only) Treat value as a delimiter for hierarchical listing")
     parser.add_option("--put-acl",          dest="acl", type="string", default="public-read", help="(`put` only) Set the ACL permission for each file [default: %default]")
     parser.add_option("--put-full-path",    dest="put_full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
+    parser.add_option("--put-only-new",     dest="put_only_new", action="store_true", help="(`put` only) Only PUT keys which don't already exist in the bucket with the same md5 digest")
     parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
     parser.add_option("--version",          dest="version", action="store_true", help="Output version information and exit")
@@ -128,17 +126,14 @@ def main():
     else:
         operation = args[1].lower()
 
-    # Setup factories
-    def toolbox_factory():
-        return S3ToolBox(aws_key, aws_secret_key, bucket)
-    def worker_factory(job_queue):
-        return workerpool.EquippedWorker(job_queue, toolbox_factory)
+    if operation == 'list' and not bucket:
+        operation = 'show'
 
     # Setup logging
     if options.verbose > 1:
-        log.setLevel(logging.DEBUG)
+        set_log_level(logging.DEBUG)
     elif options.verbose > 0:
-        log.setLevel(logging.INFO)
+        set_log_level(logging.INFO)
 
     # Setup operation configuration
     config = {'acl': options.acl,
@@ -149,39 +144,33 @@ def main():
               'aws_secret_key': aws_secret_key,
               'bucket': bucket,
               'put_full_path': options.put_full_path,
+              'put_only_new': options.put_only_new,
+              'numthreads': options.numthreads
               }
 
+    funnel = S3Funnel(**config)
+
     # Setup operation mapping
-    job_map = {'get': GetJob,
-               'put': PutJob,
-               'delete': DeleteJob,
-               }
+    methods_keys = {
+       'get':    funnel.get,
+       'put':    funnel.put,
+       'delete': funnel.delete,
+    }
 
-    method_map = {'list': list_bucket,
-                  'create': create_bucket,
-                  'drop': drop_bucket,
-                  }
+    methods_bucket = {
+       'list':   funnel.list_bucket,
+       'drop':   funnel.drop_bucket,
+       'create': funnel.create_bucket,
+    }
 
-    # Confirm that the requested operation exists
-    valid_operations = job_map.keys() + method_map.keys()
+    methods_global = {
+       'show':   funnel.show_buckets,
+    }
+
+    valid_operations = methods_keys.keys() + methods_bucket.keys() + methods_global.keys()
     valid_operations.sort()
     if operation not in valid_operations:
         parser.error("OPERATION must be one of: %s" % ', '.join(valid_operations))
-
-    if operation in method_map:
-        try:
-            # NOTE: Single-thread methods accept a toolbox_factory method instead of the resulting toolbox instance.
-            #       This makes the creation of the toolbox optional.
-            return method_map[operation](toolbox_factory, **config)
-        except boto.exception.S3ResponseError, e:
-            if e.status >= 400 and e.status < 500:
-                log.error("%d: %s" % (e.status, e.reason))
-            else:
-                log.critical("Unexpected server error: %r" % e)
-            return -1
-    
-    if operation not in job_map:
-        parser.error("Operation `%s' not implemented yet." % operation)
 
     # Get data source
     input_src = None
@@ -214,40 +203,51 @@ def main():
             data = args[2:]
         input_src = "arguments: %s" % ', '.join(data)
 
-    # Fire up the thread pool
-    log.info("Starting pool with %d threads..." % options.numthreads)
-    try:
-        pool = workerpool.WorkerPool(options.numthreads, maxjobs=options.numthreads*2, worker_factory=worker_factory)
-    except Exception, e:
-        log.critical("Failed starting workers: %r" % e)
-        return -1
-
     # Setup interrupt handling
     def shutdown(signum, stack):
         log.warning("Interrupted, shutting down...")
         event_stop.set()
     signal.signal(signal.SIGINT, shutdown)
 
-    # Start feeding jobs into the workers
-    log.info("Using files from %s" % input_src )
-    Job = job_map[operation]
+    # Setup output logger
+    output = logging.getLogger('output')
+    output_handler = logging.StreamHandler(sys.stdout)
+    output_handler.setFormatter(logging.Formatter('%(message)s'))
+    output.addHandler(output_handler)
+    output.setLevel(logging.INFO)
+
+    # Feed input into the appropriate method
+    log.info("Using input from %s" % input_src)
+
     try:
-        for item in data:
-            if event_stop.isSet(): break
-            j = Job(item.strip(), config)
-            pool.put(j)
-    except IOError:
-        log.warning("Aborted.")
+        # TODO: Rewrite this into something fancier
+        if operation in methods_global:
+            m = methods_global[operation]
+            for i in m():
+                output.info(i)
+        elif operation in methods_bucket:
+            m = methods_bucket[operation]
+            for i in m(bucket):
+                output.info(i)
+        elif operation in methods_keys:
+            m = methods_keys[operation]
+            r = m(ikeys=(d.strip() for d in data), **config)
+            if r:
+                log.critical("%d keys failed." % len(r))
+                return len(r)
+    except FunnelError, e:
+        log.critical(e.message)
+        return -1
 
-    pool.shutdown()
-    pool.join()
-
-    return 0
+    funnel.shutdown()
 
 if __name__ == "__main__":
     log_handler = logging.StreamHandler()
     log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
+
     log.addHandler(log_handler)
+    s3funnel_log.addHandler(log_handler)
+    boto_log.addHandler(log_handler)
 
     r = main()
     if r:
