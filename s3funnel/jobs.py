@@ -7,7 +7,10 @@
 from workerpool import Job
 import boto
 import time
-import hashlib
+try:
+    import hashlib
+except ImportError:
+    import md5 as hashlib
 
 import os
 import logging
