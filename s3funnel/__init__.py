@@ -16,11 +16,6 @@ __all__ = ['GetJob','PutJob','DeleteJob','S3ToolBox','BucketFunnel']
 
 # Helpers
 
-def _create_connection(aws_key, aws_secret_key):
-    "Given a configuration, return an s3 connection."
-    conn = boto.connect_s3(aws_key, aws_secret_key)
-    return conn
-
 def collapse_queue(q):
     "Given a queue, return all the items currently in it."
     items = []
@@ -41,9 +36,10 @@ class S3ToolBox(object):
     Container object for resources needed to access S3.
     This includes a connection to S3 and an instance of the bucket.
     """
-    def __init__(self, aws_key, aws_secret_key):
+    def __init__(self, aws_key, aws_secret_key, secure):
         self.aws_key = aws_key
         self.aws_secret_key = aws_secret_key
+        self.secure = secure
 
         self.reset()
 
@@ -56,7 +52,7 @@ class S3ToolBox(object):
         if self.conn: return self.conn
 
         log.debug("Starting new S3 connection.")
-        self.conn = boto.connect_s3(self.aws_key, self.aws_secret_key)
+        self.conn = boto.connect_s3(self.aws_key, self.aws_secret_key, is_secure=self.secure)
         return self.conn
 
     def get_bucket(self, name):
@@ -99,12 +95,13 @@ class S3Funnel(object):
         self.config = config
         self.numthreads = config.get('numthreads', 5)
         self.maxjobs = config.get('maxjobs', self.numthreads*2)
+        self.secure = config.get('secure', True)
 
         self.pool = pool
         self.conn = None
         self.buckets = {}
 
-        toolbox = S3ToolBox(self.aws_key, self.aws_secret_key)
+        toolbox = S3ToolBox(self.aws_key, self.aws_secret_key, self.secure)
         self._get_conn = toolbox.get_conn
         self._get_bucket = toolbox.get_bucket
 
@@ -117,7 +114,7 @@ class S3Funnel(object):
         if self.pool: return self.pool
 
         def toolbox_factory():
-            return S3ToolBox(self.aws_key, self.aws_secret_key)
+            return S3ToolBox(self.aws_key, self.aws_secret_key, self.secure)
         def worker_factory(job_queue):
             return workerpool.EquippedWorker(job_queue, toolbox_factory)
 
@@ -130,16 +127,16 @@ class S3Funnel(object):
         conn = self._get_conn()
         return (i.name for i in conn.get_all_buckets())
 
-    def create_bucket(self, name):
+    def create_bucket(self, name, **config):
         "Create bucket named ``name``"
         conn = self._get_conn()
         try:
-            b = self.conn.create_bucket(name)
+            b = conn.create_bucket(name)
             log.info("Created bucket: %s" % name)
         except BotoServerError, e:
             raise FunnelError("Bucket could not be created: %s" % name, key=name)
 
-    def drop_bucket(self, name):
+    def drop_bucket(self, name, **config):
         "Delete bucket named ``name``"
         conn = self._get_conn()
         try:

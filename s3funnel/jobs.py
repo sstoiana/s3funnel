@@ -46,13 +46,20 @@ class GetJob(Job):
                 log.info("Got: %s" % self.key)
                 return
             except S3ResponseError, e:
-                log.warning("Connection lost, reconnecting and retrying...")
-                toolbox.reset()
+                if e.status == 404:
+                    log.error("Not found: %s" % self.key)
+                    return
+                else:
+                    log.warning("Connection lost, reconnecting and retrying...")
+                    toolbox.reset()
             except BotoServerError, e:
                 break
             except (IncompleteRead, SocketError, BotoClientError), e:
                 log.warning("Caught exception: %r.\nRetrying..." % e)
                 time.sleep((2 ** i) / 4.0) # Exponential backoff
+            except IOError, e:
+                log.error("%s: '%s'" % (e.strerror, e.filename))
+                return
 
         log.error("Failed to get: %s" % self.key)
         raise JobError()
@@ -76,11 +83,13 @@ class PutJob(Job):
         if not config.get('put_full_path'):
             self.key = os.path.basename(self.key)
         self.retries = config.get('retry', 5)
-        self.acl = config.get('acl')
-        if self.acl not in ['private', 'public-read', 'public-read-write', 'authenticated-read']:
-            log.warning("Bad ACL `%s` for key, setting to `private`: %s" % (self.acl, self.key))
-            self.acl = 'private'
         self.only_new = config.get('put_only_new')
+        self.headers = config.get('headers', {})
+        acl = config.get('acl')
+        if acl not in ['private', 'public-read', 'public-read-write', 'authenticated-read']:
+            log.warning("Bad ACL `%s` for key, setting to `private`: %s" % (self.acl, self.key))
+            acl = 'private'
+        self.headers['x-amz-acl'] = acl
 
     def _is_new(self, bucket, key):
         # Get existing key etag
@@ -101,7 +110,6 @@ class PutJob(Job):
         return etag != digest
 
     def _do(self, toolbox):
-        headers = {'x-amz-acl': self.acl}
         for i in xrange(self.retries):
             try:
                 bucket = toolbox.get_bucket(self.bucket)
@@ -110,7 +118,7 @@ class PutJob(Job):
                     return
 
                 k = bucket.new_key(self.key)
-                k.set_contents_from_filename(self.path, headers)
+                k.set_contents_from_filename(self.path, self.headers)
                 log.info("Sent: %s" % self.key)
                 return
             except S3ResponseError, e:
