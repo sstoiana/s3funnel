@@ -1,5 +1,6 @@
 # s3funnel
 
+This project is a clone of <https://github.com/shazow>'s s3funnel from google code: <http://code.google.com/p/s3funnel/>
 s3funnel is a command line tool for Amazon's Simple Storage Service (S3).
 
 - Written in Python, easy_install the package to install as an egg.
