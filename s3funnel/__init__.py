@@ -10,7 +10,7 @@ from socket import error as SocketError
 from Queue import Queue, Empty
 from exceptions import FunnelError
 
-from jobs import GetJob, PutJob, DeleteJob
+from jobs import GetJob, PutJob, DeleteJob, CopyJob
 
 __all__ = ['GetJob','PutJob','DeleteJob','S3ToolBox','BucketFunnel']
 
@@ -231,3 +231,22 @@ class S3Funnel(object):
 
         return collapse_queue(failed)
 
+    def copy(self, bucket, ikeys, retry=5, acl='public-read', **config):
+        """
+        Given an iterator of file paths, copy these files into the current bucket from source bucket
+        Return a list of failed keys (if any).
+        """
+        # Setup local config for this request
+        c = {}
+        c.update(config)
+        c['retry'] = retry
+        c['acl'] = acl
+
+        failed = Queue()
+        pool = self._get_pool()
+        for k in ikeys:
+            j = CopyJob(bucket, k, failed, c)
+            pool.put(j)
+        pool.join()
+
+        return collapse_queue(failed)

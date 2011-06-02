@@ -73,6 +73,7 @@ def main():
     parser.add_option("--put-full-path",    dest="put_full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
     parser.add_option("--put-only-new",     dest="put_only_new", action="store_true", help="(`put` only) Only PUT keys which don't already exist in the bucket with the same md5 digest")
     parser.add_option("--put-header",       dest="headers", type="string", action="append", help="(`put` only) Add the specified header to the request")
+    parser.add_option("--source-bucket",    dest="source_bucket", type="string", help="(`copy` only) Source bucket for files")
     parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
     parser.add_option("--version",          dest="version", action="store_true", help="Output version information and exit")
@@ -139,6 +140,10 @@ def main():
 
     if operation == 'list' and not bucket:
         operation = 'show'
+        
+    if operation == 'copy' and not options.source_bucket:
+        parser.error("Source bucket not specified")
+        return -1
 
     # Setup logging
     if options.verbose > 1:
@@ -155,6 +160,7 @@ def main():
               'aws_secret_key': aws_secret_key,
               'secure': options.secure,
               'bucket': bucket,
+              'source_bucket': options.source_bucket, 
               'put_full_path': options.put_full_path,
               'put_only_new': options.put_only_new,
               'headers': headers,
@@ -168,6 +174,7 @@ def main():
        'get':    funnel.get,
        'put':    funnel.put,
        'delete': funnel.delete,
+       'copy':   funnel.copy,
     }
 
     methods_bucket = {
@@ -218,8 +225,9 @@ def main():
 
     # Setup interrupt handling
     def shutdown(signum, stack):
-        log.warning("Interrupted, shutting down...")
-        event_stop.set()
+        #log.warning("Interrupted, shutting down...")
+        #event_stop.set()
+        sys.exit()
     signal.signal(signal.SIGINT, shutdown)
 
     # Setup output logger
@@ -237,11 +245,11 @@ def main():
         if operation in methods_global:
             m = methods_global[operation]
             for i in m():
-                output.info(i)
+                print i
         elif operation in methods_bucket:
             m = methods_bucket[operation]
             for i in m(bucket, **config):
-                output.info(i)
+                print i
         elif operation in methods_keys:
             m = methods_keys[operation]
             r = m(ikeys=(d.strip() for d in data), **config)
