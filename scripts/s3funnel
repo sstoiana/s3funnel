@@ -12,6 +12,7 @@ Key Operations:
     DELETE Delete key from the bucket
     GET    Get key from the bucket
     PUT    Put file into the bucket (key is the basename of the path)
+    COPY   Copy keys to the bucket from another bucket.
 
 Bucket Operations:
     CREATE Create a new bucket
