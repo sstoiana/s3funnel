@@ -257,8 +257,10 @@ def main():
             if r:
                 log.critical("%d keys failed." % len(r))
                 return len(r)
+    except TypeError, e:
+        pass
     except FunnelError, e:
-        log.critical(e.message)
+        log.critical(e)
         return -1
 
     funnel.shutdown()

@@ -7,5 +7,7 @@ class FunnelError(Exception):
     may be a bucket name or an item key inside a bucket.
     """
     def __init__(self, message, key=None):
-        self.message = message
+        self._message = message
         self.key = key
+    def __str__(self):
+        return repr(self._message)
