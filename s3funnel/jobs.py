@@ -85,7 +85,13 @@ class PutJob(Job):
         self.bucket = bucket
         self.path = path
         self.failed = failed
-        self.key = self.path
+        # --add-prefix logic
+        self.add_prefix = config.get('add_prefix', '')
+        self.key = "%s%s" % (self.add_prefix, self.path)
+        # --del-prefix logic
+        self.del_prefix = config.get('del_prefix')
+        if self.del_prefix and self.key.startswith(self.del_prefix): 
+            self.key = self.key.replace(self.del_prefix, '', 1)    
         if not config.get('put_full_path'):
             self.key = os.path.basename(self.key)
         self.retries = config.get('retry', 5)
@@ -188,6 +194,13 @@ class CopyJob(Job):
     def __init__(self, bucket, key, failed, config={}):
         self.bucket = bucket
         self.key = key
+        # --add-prefix logic
+        self.add_prefix = config.get('add_prefix', '')
+        self.dest_key = "%s%s" % (self.add_prefix, key)
+        # --del-prefix logic
+        self.del_prefix = config.get('del_prefix')
+        if self.del_prefix and self.dest_key.startswith(self.del_prefix): 
+            self.dest_key = self.dest_key.replace(self.del_prefix, '', 1)
         self.source_bucket = config.get('source_bucket')
         self.failed = failed
         self.retries = config.get('retry', 5)
@@ -195,8 +208,8 @@ class CopyJob(Job):
     def _do(self, toolbox):
         for i in xrange(self.retries):
             try:
-                k = toolbox.get_bucket(self.bucket).copy_key(self.key, self.source_bucket, self.key)
-                log.info("Copied: %s" % self.key)
+                k = toolbox.get_bucket(self.bucket).copy_key(self.dest_key, self.source_bucket, self.key)
+                log.info("Copied: %s to %s" % (self.key, self.dest_key))
                 return
             except S3ResponseError, e:
                 log.warning("Connection lost, reconnecting and retrying...")

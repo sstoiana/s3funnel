@@ -74,6 +74,8 @@ def main():
     parser.add_option("--put-full-path",    dest="put_full_path", action="store_true", help="(`put` only) Use the full given path as the key name, instead of just the basename")
     parser.add_option("--put-only-new",     dest="put_only_new", action="store_true", help="(`put` only) Only PUT keys which don't already exist in the bucket with the same md5 digest")
     parser.add_option("--put-header",       dest="headers", type="string", action="append", help="(`put` only) Add the specified header to the request")
+    parser.add_option("--add-prefix",       dest="add_prefix", type="string", default="", help="(`put` and `copy` only) Add specified prefix to keys in destination bucket")
+    parser.add_option("--del-prefix",       dest="del_prefix", type="string", default="", help="(`put` and `copy` only) Delete specified prefix from keys in destination bucket")
     parser.add_option("--source-bucket",    dest="source_bucket", type="string", help="(`copy` only) Source bucket for files")
     parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
@@ -142,6 +144,10 @@ def main():
     if operation == 'list' and not bucket:
         operation = 'show'
         
+    if options.add_prefix and options.del_prefix:
+        parser.error("--add-prefix and --del-prefix options are mutually exclusive")
+        return -1
+    
     if operation == 'copy' and not options.source_bucket:
         parser.error("Source bucket not specified")
         return -1
@@ -164,6 +170,8 @@ def main():
               'source_bucket': options.source_bucket, 
               'put_full_path': options.put_full_path,
               'put_only_new': options.put_only_new,
+              'add_prefix': options.add_prefix,
+              'del_prefix': options.del_prefix,
               'headers': headers,
               'numthreads': options.numthreads
               }
