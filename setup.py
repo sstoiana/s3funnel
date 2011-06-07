@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import sys, os
 
-version = '0.6'
+version = '0.6.1'
 
 setup(name='s3funnel',
       version=version,
@@ -12,7 +12,9 @@ This tool uses the workerpool for multithreading and boto for access to the Amaz
       keywords='',
       author='Andrey Petrov',
       author_email='andrey.petrov@shazow.net',
-      url='',
+      maintainer='Sorin Stoiana',
+      author_email='sorinalin.stoiana@gmail.com',
+      url='https://github.com/sstoiana/s3funnel',
       license='MIT',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
       include_package_data=True,
