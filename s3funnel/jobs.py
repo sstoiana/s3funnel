@@ -41,6 +41,12 @@ class GetJob(Job):
         for i in xrange(self.retries):
             try:
                 k = toolbox.get_bucket(self.bucket).new_key(self.key)
+                try:
+                    # Create directories in case key has "/"
+                    if os.path.dirname(self.key) and not os.path.exists(os.path.dirname(self.key)):
+                        os.makedirs(os.path.dirname(self.key))
+                except OSError:
+                    pass
                 # Note: This creates a file, even if the download fails
                 k.get_contents_to_filename(self.key)
                 log.info("Got: %s" % self.key)
