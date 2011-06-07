@@ -13,7 +13,7 @@ This tool uses the workerpool for multithreading and boto for access to the Amaz
       author='Andrey Petrov',
       author_email='andrey.petrov@shazow.net',
       maintainer='Sorin Stoiana',
-      author_email='sorinalin.stoiana@gmail.com',
+      maintainer_email='sorinalin.stoiana@gmail.com',
       url='https://github.com/sstoiana/s3funnel',
       license='MIT',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
