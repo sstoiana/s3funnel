@@ -115,7 +115,7 @@ class PutJob(Job):
         data = fp.read(READ_CHUNK)
         while data:
             hash.update(data)
-            data = read(READ_CHUNK)
+            data = fp.read(READ_CHUNK)
         fp.close()
         digest = hash.hexdigest()
 
