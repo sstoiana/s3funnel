@@ -36,11 +36,20 @@ class GetJob(Job):
         self.key = key
         self.failed = failed
         self.retries = config.get('retry', 5)
+        self.ignore_s3fs_dirs = config.get('ignore_s3fs_dirs',True)
 
     def _do(self, toolbox):
         for i in xrange(self.retries):
             try:
-                k = toolbox.get_bucket(self.bucket).new_key(self.key)
+                b = toolbox.get_bucket(self.bucket)
+                    
+                b.connection.provider.metadata_prefix = ''
+                k = b.get_key(self.key)
+                m = k.get_metadata('content-type')
+                
+                if m == 'application/x-directory' and self.ignore_s3fs_dirs:
+                     log.warn("Skipping s3fs directory: %s" % self.key)
+                     return
                 try:
                     # Create directories in case key has "/"
                     if os.path.dirname(self.key) and not os.path.exists(os.path.dirname(self.key)):

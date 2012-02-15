@@ -20,7 +20,7 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
-__VERSION__ = '0.6.1'
+__VERSION__ = '0.6.2'
 
 """
 TODO:
@@ -77,6 +77,7 @@ def main():
     parser.add_option("--add-prefix",       dest="add_prefix", type="string", default="", help="(`put` and `copy` only) Add specified prefix to keys in destination bucket")
     parser.add_option("--del-prefix",       dest="del_prefix", type="string", default="", help="(`put` and `copy` only) Delete specified prefix from keys in destination bucket")
     parser.add_option("--source-bucket",    dest="source_bucket", type="string", help="(`copy` only) Source bucket for files")
+    parser.add_option("--no-ignore-s3fs-dirs",    dest="ignore_s3fs_dirs", action="store_false", default=True, help="(`get` only) Don't ignore s3fs directory objects ")
     parser.add_option("-i", "--input",      dest="input", type="string", metavar="FILE", help="Read one file per line from a FILE manifest")
     parser.add_option("-v", "--verbose",    dest="verbose", action="count", default=None, help="Enable verbose output. Use twice to enable debug output")
     parser.add_option("--version",          dest="version", action="store_true", help="Output version information and exit")
@@ -173,7 +174,8 @@ def main():
               'add_prefix': options.add_prefix,
               'del_prefix': options.del_prefix,
               'headers': headers,
-              'numthreads': options.numthreads
+              'numthreads': options.numthreads,
+              'ignore_s3fs_dirs': options.ignore_s3fs_dirs
               }
 
     funnel = S3Funnel(**config)
