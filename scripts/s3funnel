@@ -20,7 +20,7 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
-__VERSION__ = '0.6.2'
+__VERSION__ = '0.6.3'
 
 """
 TODO:
@@ -55,8 +55,6 @@ import workerpool
 # Local imports
 from s3funnel import S3Funnel
 from s3funnel.exceptions import FunnelError
-
-event_stop = threading.Event()
 
 def main():
     # Parse the command line...
@@ -236,8 +234,8 @@ def main():
 
     # Setup interrupt handling
     def shutdown(signum, stack):
-        #log.warning("Interrupted, shutting down...")
-        #event_stop.set()
+        log.warning("Interrupted, shutting down...")
+        funnel.shutdown()
         sys.exit()
     signal.signal(signal.SIGINT, shutdown)
 
