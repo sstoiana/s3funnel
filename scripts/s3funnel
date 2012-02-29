@@ -20,7 +20,7 @@ Bucket Operations:
     LIST   List keys in the bucket. If no bucket is given, buckets will be listed.
 """
 
-__VERSION__ = '0.6.4'
+__VERSION__ = '0.6.5'
 
 """
 TODO:
