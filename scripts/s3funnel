@@ -264,12 +264,16 @@ def main():
             r = m(ikeys=(d.strip() for d in data), **config)
             if r:
                 log.critical("%d keys failed." % len(r))
+                funnel.shutdown()
                 return len(r)
     except TypeError, e:
         pass
     except FunnelError, e:
         log.critical(e)
+        funnel.shutdown()
         return -1
+    
+    funnel.shutdown()
 
 if __name__ == "__main__":
     log_handler = logging.StreamHandler()
@@ -280,6 +284,5 @@ if __name__ == "__main__":
     boto_log.addHandler(log_handler)
 
     r = main()
-    funnel.shutdown()
     if r:
         sys.exit(r)
