@@ -254,11 +254,11 @@ def main():
         if operation in methods_global:
             m = methods_global[operation]
             for i in m():
-                print i
+                output.info(i)
         elif operation in methods_bucket:
             m = methods_bucket[operation]
             for i in m(bucket, **config):
-                print i
+                output.info(i)
         elif operation in methods_keys:
             m = methods_keys[operation]
             r = m(ikeys=(d.strip() for d in data), **config)
