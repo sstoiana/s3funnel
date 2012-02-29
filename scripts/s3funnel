@@ -271,8 +271,6 @@ def main():
         log.critical(e)
         return -1
 
-    funnel.shutdown()
-
 if __name__ == "__main__":
     log_handler = logging.StreamHandler()
     log_handler.setFormatter(logging.Formatter('%(levelname)-8s %(message)s'))
@@ -282,5 +280,6 @@ if __name__ == "__main__":
     boto_log.addHandler(log_handler)
 
     r = main()
+    funnel.shutdown()
     if r:
         sys.exit(r)
